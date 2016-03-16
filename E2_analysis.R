@@ -65,13 +65,13 @@ intransitive <- collapsed[collapsed$Condition=="Intransitive",]
 happen <- collapsed[collapsed$Condition=="Happen",]
 
 length(collapsed$Days.Old)
-mean(aggregate(collapsed$Days.Old, by=list(collapsed$Subject), mean)) 
+mean(collapsed$Days.Old, na.rm = TRUE) 
 length(transitive$Days.Old)
-mean(aggregate(transitive$Days.Old, by=list(transitive$Subject), mean)) 
+mean(transitive$Days.Old)
 length(intransitive$Days.Old)
-mean(aggregate(intransitive$Days.Old, by=list(intransitive$Subject), mean)) 
+mean(intransitive$Days.Old) 
 length(happen$Days.Old)
-mean(aggregate(happen$Days.Old, by=list(happen$Subject), mean)) 
+mean(happen$Days.Old) 
 
 foo <- subset(collapsed, select=c("Subject", "Days.Old"))
 min(foo$Days.Old)
