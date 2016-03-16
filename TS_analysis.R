@@ -1,0 +1,274 @@
+#This reads in the *.dat data from a forced-choice
+#experiment (TVW at the moment!)
+
+#Note: Data cleaning & participant selection (see Participants_TSW for details for fussouts/other exclusions)
+#Descriptives & analsyis start line 50
+
+#setwd("C:\\Users\\mekline\\Documents\\My Dropbox\\_Projects\\Wugging - Finished Experiments\\2011 TemporalSwitchWugging\\Analysis")
+setwd("/Users/mekline/Dropbox/_Projects/Wugging - Finished Experiments/2013 TemporalSwitchWugging/Analysis")
+#DATA LOADING & SHAPING
+#libraries
+library(reshape)
+
+####Load Datafiles
+#Load in the data from the TVW files
+
+mydata <- data.frame(NULL)
+max_participant = 131
+
+for(f in 1:max_participant) {
+	filename = paste('Data/TSW_', f, '.dat', sep='')
+	tryCatch({
+		tmp <- read.table(filename, header=FALSE, sep=" ")
+		names(tmp) <- c("Subject", "Condition", "Trial.Number", "MUSH", "First.Item", "Second.Item",
+			 "First.Side", "Causal.Side", "Response.Causal", "Choice.Causal")
+		mydata <- rbind(mydata, tmp)
+		}, 
+		error = function(ex) {},
+		finally = {})
+}
+
+#Load in the data about participants and pretest/touch performance
+pdata <- data.frame(NULL)
+pdata <- read.table('Participants_TSW.csv', header=TRUE, sep=',')
+mydata <- merge(mydata, pdata, by=c("Subject"))
+
+#Make sure conditions are labeled correctly
+mydata <- mydata[mydata$Experiment != "switch-pilot",]
+
+#THROW OUT people who didn't get included!
+
+
+#Optional - keep those who just failed pretest!!
+mydata[mydata$Exclude.Reason == "FAILED PRETEST",]$Include <- 0
+
+mydata <- mydata[mydata$Include == 1,]
+mydata <- mydata[!is.na(mydata$Condition),]
+
+
+
+
+################################################
+#####DEMOGRAPHICS
+
+#means days old - Note, it counts subjects not trials
+collapsed <- mydata[!duplicated(mydata$Subject),]
+transitive <- collapsed[collapsed$Condition=="Transitive",]
+intransitive <- collapsed[collapsed$Condition=="Intransitive",]
+happen <- collapsed[collapsed$Condition=="Happen",]
+
+length(collapsed$Days.Old)
+mean(aggregate(collapsed$Days.Old, by=list(collapsed$Subject), mean)) 
+length(transitive$Days.Old)
+mean(aggregate(transitive$Days.Old, by=list(transitive$Subject), mean)) 
+length(intransitive$Days.Old)
+mean(aggregate(intransitive$Days.Old, by=list(intransitive$Subject), mean)) 
+length(happen$Days.Old)
+mean(aggregate(happen$Days.Old, by=list(happen$Subject), mean)) 
+
+foo <- subset(collapsed, select=c("Subject", "Days.Old"))
+min(foo$Days.Old)
+max(foo$Days.Old)
+
+#Number of girls - Note, make sure it counts subjects, not trials!
+foo <- subset(collapsed, select=c("Subject", "Gender"))
+nrow(foo[foo$Gender=="F",])
+nrow(foo[foo$Gender=="M",])
+
+
+
+
+################################################
+#######ANALYSIS!
+
+#aggregate the choices in a new dataframe: how many causal choices did you make, 0, 1, or 2
+sum.na.rm <- function(x) { sum(x,na.rm=T) }
+my.sd <- function(x) {sd(x)/sqrt(length(x))}
+
+Scores <- aggregate(mydata$Choice.Causal, by=list(mydata$Subject), sum.na.rm)
+names(Scores) <- c("Subject", "CausalScore")
+collapsed <- merge(collapsed,Scores, by=c("Subject"))
+
+with(collapsed, tapply(CausalScore, list(Condition), mean, na.rm=TRUE), drop=TRUE)
+with(collapsed, tapply(CausalScore, list(Condition), my.sd), drop=TRUE)
+
+#Check whether each group is different from chance, with wilcox test
+wilcox.test(collapsed[collapsed$Condition=="Transitive",]$CausalScore, mu=1, exact=FALSE)
+wilcox.test(collapsed[collapsed$Condition=="Intransitive",]$CausalScore, mu=1, exact=FALSE)
+wilcox.test(collapsed[collapsed$Condition=="Happen",]$CausalScore, mu=1, exact=FALSE)
+
+#And is transitive different from intransitive?
+wilcox.test(collapsed[collapsed$Condition=="Transitive",]$CausalScore, collapsed[collapsed$Condition=="Intransitive",]$CausalScore, exact=FALSE, paired = FALSE)
+#And is transitive different from happen?
+wilcox.test(collapsed[collapsed$Condition=="Transitive",]$CausalScore, collapsed[collapsed$Condition=="Happen",]$CausalScore, exact=FALSE, paired = FALSE)
+#And is happen different from intransitive?
+wilcox.test(collapsed[collapsed$Condition=="Happen",]$CausalScore, collapsed[collapsed$Condition=="Intransitive",]$CausalScore, exact=FALSE, paired = FALSE)
+
+#Time for bootstrapped confidence intervals around the means of the 3 conditions!
+library(bootstrap)
+trans.boot.mean = bootstrap(collapsed[collapsed$Condition=="Transitive",]$CausalScore, 1000, mean)
+quantile(trans.boot.mean$thetastar, c(0.025, 0.975))
+intrans.boot.mean = bootstrap(collapsed[collapsed$Condition=="Intransitive",]$CausalScore, 1000, mean)
+quantile(intrans.boot.mean$thetastar, c(0.025, 0.975))
+happen.boot.mean = bootstrap(collapsed[collapsed$Condition=="Happen",]$CausalScore, 1000, mean)
+quantile(happen.boot.mean$thetastar, c(0.025, 0.975))
+
+
+#And try all those as T tests, even though that's toootally wrong
+#Check whether each group is different from chance, with wilcox test
+t.test(collapsed[collapsed$Condition=="Transitive",]$CausalScore, mu=1, exact=FALSE)
+t.test(collapsed[collapsed$Condition=="Intransitive",]$CausalScore, mu=1, exact=FALSE)
+t.test(collapsed[collapsed$Condition=="Happen",]$CausalScore, mu=1, exact=FALSE)
+
+#And is transitive different from intransitive?
+t.test(collapsed[collapsed$Condition=="Transitive",]$CausalScore, collapsed[collapsed$Condition=="Intransitive",]$CausalScore, exact=FALSE, paired = FALSE)
+#And is transitive different from happen?
+t.test(collapsed[collapsed$Condition=="Transitive",]$CausalScore, collapsed[collapsed$Condition=="Happen",]$CausalScore, exact=FALSE, paired = FALSE)
+
+
+
+
+#Compare 3s and 4s
+threes <- collapsed[collapsed$Age.Years == 3,]
+fours <- collapsed[collapsed$Age.Years == 4,]
+
+with(threes, tapply(CausalScore, list(Condition), mean, na.rm=TRUE), drop=TRUE)
+with(fours, tapply(CausalScore, list(Condition), mean, na.rm=TRUE), drop=TRUE)
+
+wilcox.test(threes[threes$Condition=="Transitive",]$CausalScore, fours[fours$Condition=="Transitive",]$CausalScore, exact=FALSE)
+wilcox.test(threes[threes$Condition=="Intransitive",]$CausalScore, fours[fours$Condition=="Intransitive",]$CausalScore, exact=FALSE)
+wilcox.test(threes[threes$Condition=="Happen",]$CausalScore, fours[fours$Condition=="Happen",]$CausalScore, exact=FALSE)
+
+#Check whether each group is different from chance, with wilcox test
+wilcox.test(threes[threes$Condition=="Transitive",]$CausalScore, mu=1, exact=FALSE)
+wilcox.test(threes[threes$Condition=="Intransitive",]$CausalScore, mu=1, exact=FALSE)
+wilcox.test(threes[threes$Condition=="Happen",]$CausalScore, mu=1, exact=FALSE)
+
+#And is transitive different from intransitive?
+wilcox.test(threes[threes$Condition=="Transitive",]$CausalScore, threes[threes$Condition=="Intransitive",]$CausalScore, exact=FALSE)
+
+#Check whether each group is different from chance, with wilcox test
+wilcox.test(fours[fours$Condition=="Transitive",]$CausalScore, mu=1, exact=FALSE)
+wilcox.test(fours[fours$Condition=="Intransitive",]$CausalScore, mu=1, exact=FALSE)
+wilcox.test(fours[fours$Condition=="Happen",]$CausalScore, mu=1, exact=FALSE)
+
+#And is transitive different from intransitive?
+wilcox.test(fours[fours$Condition=="Transitive",]$CausalScore, fours[fours$Condition=="Intransitive",]$CausalScore, exact=FALSE)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+################################################
+#Old ANALYSIS
+##ANALYSIS - DESCRIPTIVES
+#How did they do on causal questions?
+
+trials.CQ <- nrow(mydata)
+corr.CQ <- nrow(mydata[mydata$Choice.Causal == 1,])
+corr.CQ/trials.CQ
+
+#How about noncausal?
+
+trials.NCQ <- nrow(mydata)
+corr.NCQ <- nrow(mydata[mydata$Choice.NC == 0,])
+corr.NCQ/trials.NCQ
+
+#Overall?
+
+(corr.CQ + corr.NCQ)/(trials.CQ + trials.NCQ)
+
+#What about 1st vs. 2nd question?
+
+yesfirst <- mydata[mydata$Yesfirst == 1,]
+nofirst <- mydata[mydata$Yesfirst == 0,]
+
+#First questions are yesfirst causal and nofirst NC
+trials.CQ <- nrow(yesfirst)
+corr.CQ <- nrow(yesfirst[yesfirst$Choice.Causal == 1,])
+corr.CQ/trials.CQ
+
+trials.NCQ <- nrow(nofirst)
+corr.NCQ <- nrow(nofirst[nofirst$Choice.NC == 0,])
+corr.NCQ/trials.NCQ
+
+(corr.CQ + corr.NCQ)/(trials.CQ + trials.NCQ)
+
+#Second questions are yesfirst NC, nofirst C
+
+trials.NCQ <- nrow(yesfirst)
+corr.NCQ <- nrow(yesfirst[yesfirst$Choice.NC == 0,])
+corr.NCQ/trials.NCQ
+
+trials.CQ <- nrow(nofirst)
+corr.CQ <- nrow(nofirst[nofirst$Choice.Causal == 1,])
+corr.CQ/trials.CQ
+
+(corr.CQ + corr.NCQ)/(trials.CQ + trials.NCQ)
+
+
+
+
+
+
+
+
+
+
+#################################
+
+mydata$Causal.First <- mydata$First.Side==mydata$Causal.Side
+
+trials.cfirst <- nrow(oldsters[oldsters$Causal.First == TRUE,])
+trials.cfirst
+trials.clast <- nrow(oldsters[oldsters$Causal.First == FALSE,])
+trials.clast
+
+corr.cfirst <- sum(oldsters[oldsters$Causal.First == TRUE,]$Causal.Choice)
+corr.cfirst/trials.cfirst
+
+corr.clast <- sum(oldsters[oldsters$Causal.First == FALSE,]$Causal.Choice)
+corr.clast/trials.clast
+
+(corr.cfirst+corr.clast)/(trials.cfirst+trials.clast)
+
+unique(oldsters$Subject)
+
+
+
+
+
+
+
+
+trials.cfirst <- nrow(mydata[mydata$Causal.First == TRUE,])
+trials.cfirst
+trials.clast <- nrow(mydata[mydata$Causal.First == FALSE,])
+trials.clast
+
+corr.cfirst <- sum(mydata[mydata$Causal.First == TRUE,]$Causal.Choice)
+corr.cfirst/trials.cfirst
+
+corr.clast <- sum(mydata[mydata$Causal.First == FALSE,]$Causal.Choice)
+corr.clast/trials.clast
+
+(corr.cfirst+corr.clast)/(trials.cfirst+trials.clast)
+
+
+
