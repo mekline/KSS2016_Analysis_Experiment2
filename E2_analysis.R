@@ -4,11 +4,18 @@
 #Note: Data cleaning & participant selection (see Participants_TSW for details for fussouts/other exclusions)
 #Descriptives & analsyis start line 50
 
-#setwd("C:\\Users\\mekline\\Documents\\My Dropbox\\_Projects\\Wugging - Finished Experiments\\2011 TemporalSwitchWugging\\Analysis")
-setwd("/Users/mekline/Dropbox/_Projects/Wugging - Finished Experiments/2013 TemporalSwitchWugging/Analysis")
-#DATA LOADING & SHAPING
-#libraries
 library(reshape)
+library(stringr)
+library(ggplot2)
+library(testit)
+library(ggthemes)
+library(bootstrap)
+
+assert("Make sure R is pointed at the right working directory", sum(str_detect(dir(), "Data_E2"))==1)
+#See setwd() or Session > Set Working Directory > To Source File Location 
+
+
+#DATA LOADING & SHAPING
 
 ####Load Datafiles
 #Load in the data from the TVW files
@@ -17,7 +24,7 @@ mydata <- data.frame(NULL)
 max_participant = 131
 
 for(f in 1:max_participant) {
-	filename = paste('Data/TSW_', f, '.dat', sep='')
+	filename = paste('Data_E2/TSW_', f, '.dat', sep='')
 	tryCatch({
 		tmp <- read.table(filename, header=FALSE, sep=" ")
 		names(tmp) <- c("Subject", "Condition", "Trial.Number", "MUSH", "First.Item", "Second.Item",
@@ -105,13 +112,45 @@ wilcox.test(collapsed[collapsed$Condition=="Transitive",]$CausalScore, collapsed
 wilcox.test(collapsed[collapsed$Condition=="Happen",]$CausalScore, collapsed[collapsed$Condition=="Intransitive",]$CausalScore, exact=FALSE, paired = FALSE)
 
 #Time for bootstrapped confidence intervals around the means of the 3 conditions!
-library(bootstrap)
-trans.boot.mean = bootstrap(collapsed[collapsed$Condition=="Transitive",]$CausalScore, 1000, mean)
-quantile(trans.boot.mean$thetastar, c(0.025, 0.975))
-intrans.boot.mean = bootstrap(collapsed[collapsed$Condition=="Intransitive",]$CausalScore, 1000, mean)
-quantile(intrans.boot.mean$thetastar, c(0.025, 0.975))
+graphdata <- data.frame(NULL)
 happen.boot.mean = bootstrap(collapsed[collapsed$Condition=="Happen",]$CausalScore, 1000, mean)
-quantile(happen.boot.mean$thetastar, c(0.025, 0.975))
+graphdata <- rbind(graphdata,quantile(happen.boot.mean$thetastar, c(0.025, 0.975)))
+trans.boot.mean = bootstrap(collapsed[collapsed$Condition=="Transitive",]$CausalScore, 1000, mean)
+graphdata <- rbind(graphdata,quantile(trans.boot.mean$thetastar, c(0.025, 0.975)))
+intrans.boot.mean = bootstrap(collapsed[collapsed$Condition=="Intransitive",]$CausalScore, 1000, mean)
+graphdata <- rbind(graphdata,quantile(intrans.boot.mean$thetastar, c(0.025, 0.975)))
+
+names(graphdata) <- c("LowCI","HighCI")
+
+graphdata$CondName <- c("Manipulation Check", "Transitive", "Intransitive")
+
+#New 3/16/16 make some pretty ggplot graphs 
+graphdata$Mean[1] <- mean(collapsed[collapsed$Condition=="Happen",]$CausalScore)
+graphdata$Mean[2] <- mean(collapsed[collapsed$Condition=="Transitive",]$CausalScore)
+graphdata$Mean[3] <- mean(collapsed[collapsed$Condition=="Intransitive",]$CausalScore)
+
+graphdata$ToOrder <- c(1,2,3)
+barcolors = c("steelblue2", "steelblue4", "steelblue3") #Dumb bug! I am overriding R's default order and the colors don't go with :(
+p<- ggplot(graphdata, aes(x=CondName, y=Mean, fill=CondName, group=CondName)) +
+  geom_bar(stat="identity",) +
+  aes(x=reorder(CondName, ToOrder)) +
+  scale_fill_manual(values=barcolors) +
+  geom_errorbar(aes(ymin=LowCI, ymax=HighCI), colour="black", width=.1) +
+  coord_cartesian(ylim=c(0,2))+  
+  #theme_set(theme_gray(base_size = 14))+
+  #ggtitle(title)+
+  ylab("Mean Causal Choices")+
+  xlab("")+
+  theme(legend.position="none")+
+  geom_hline(aes(yintercept=1), color="black", linetype="dashed")
+
+p
+ggsave(filename="E2.jpg", plot=p, width=6, height=4)
+
+
+
+
+
 
 
 #And try all those as T tests, even though that's toootally wrong
